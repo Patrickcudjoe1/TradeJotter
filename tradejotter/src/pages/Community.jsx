@@ -1,255 +1,126 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthProvider'
-import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
 const Community = () => {
     const { user } = useAuth()
-    const navigate = useNavigate()
-    const [threads, setThreads] = useState([
-        {
-            id: 1,
-            title: "📈 EURUSD Analysis - Next Major Resistance Level?",
-            author: "FXLegend",
-            replies: 12,
-            category: "Technical Analysis",
-            time: "2h ago",
-            likes: 18,
-            hasLiked: false
-        },
-        {
-            id: 2,
-            title: "⚖️ Risk Management rules for scaling accounts",
-            author: "RiskFirst",
-            replies: 8,
-            category: "Education",
-            time: "5h ago",
-            likes: 24,
-            hasLiked: false
-        },
-        {
-            id: 3,
-            title: "🤖 Backtesting AI models for gold (XAUUSD)",
-            author: "QuantDev",
-            replies: 15,
-            category: "AI Trading",
-            time: "1d ago",
-            likes: 31,
-            hasLiked: false
-        }
-    ])
-    
-    const [activeTab, setActiveTab] = useState('All')
-    const [newPostTitle, setNewPostTitle] = useState('')
-    const [newPostCategory, setNewPostCategory] = useState('General')
+    const [posts, setPosts] = useState([])
+    const [content, setContent] = useState('')
+    const [loading, setLoading] = useState(true)
+    const [posting, setPosting] = useState(false)
 
-    const handleLike = (id) => {
-        setThreads(threads.map(t => {
-            if (t.id === id) {
-                return {
-                    ...t,
-                    likes: t.hasLiked ? t.likes - 1 : t.likes + 1,
-                    hasLiked: !t.hasLiked
-                }
-            }
-            return t
-        }))
+    useEffect(() => { fetchPosts() }, [])
+
+    const fetchPosts = async () => {
+        setLoading(true)
+        const { data, error } = await supabase
+            .from('community_posts')
+            .select('*, profiles (username)')
+            .order('created_at', { ascending: false })
+            .limit(50)
+        if (!error) setPosts(data || [])
+        setLoading(false)
     }
 
-    const handleCreatePost = (e) => {
-        e.preventDefault()
-        if (!newPostTitle.trim()) return
+    const handlePost = async () => {
+        if (!content.trim()) return
+        setPosting(true)
+        const { error } = await supabase.from('community_posts').insert({ user_id: user.id, content: content.trim() })
+        if (!error) { setContent(''); fetchPosts() }
+        setPosting(false)
+    }
 
-        const newThread = {
-            id: Date.now(),
-            title: newPostTitle,
-            author: user?.email ? user.email.split('@')[0] : 'Trader',
-            replies: 0,
-            category: newPostCategory,
-            time: "Just now",
-            likes: 0,
-            hasLiked: false
-        }
+    const handleLike = async (post) => {
+        await supabase.from('community_posts').update({ likes: post.likes + 1 }).eq('id', post.id)
+        fetchPosts()
+    }
 
-        setThreads([newThread, ...threads])
-        setNewPostTitle('')
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this post?')) return
+        await supabase.from('community_posts').delete().eq('id', id)
+        fetchPosts()
+    }
+
+    const timeAgo = (date) => {
+        const s = Math.floor((new Date() - new Date(date)) / 1000)
+        if (s < 60) return 'just now'
+        if (s < 3600) return `${Math.floor(s / 60)}m ago`
+        if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+        return `${Math.floor(s / 86400)}d ago`
     }
 
     return (
-        <div style={{ maxWidth: 900, margin: '40px auto', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h1 style={{ margin: 0, fontSize: '2rem', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        💬 Trading Community
-                    </h1>
-                    <p style={{ color: 'gray', margin: '4px 0 0 0' }}>
-                        Share ideas, ask questions, and collaborate with other traders.
-                    </p>
-                </div>
-                <button 
-                    onClick={() => navigate('/dashboard')} 
-                    style={{ 
-                        padding: '10px 18px', 
-                        background: 'transparent', 
-                        border: '1px solid #ccc', 
-                        borderRadius: 8, 
-                        cursor: 'pointer',
-                        fontWeight: '500',
-                        transition: 'all 0.2s'
-                    }}
-                >
-                    ← Back to Dashboard
-                </button>
+        <div style={{ maxWidth: 700, margin: '0 auto', padding: '40px 24px' }}>
+            <div style={{ marginBottom: 32 }}>
+                <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>🌐 Community</h1>
+                <p style={{ color: '#444', margin: '6px 0 0', fontSize: 13 }}>Share trade ideas and setups with other traders</p>
             </div>
 
-            <hr style={{ margin: '24px 0', border: 'none', borderBottom: '1px solid #eee' }} />
+            {/* Composer */}
+            <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: 20, marginBottom: 24 }}>
+                <textarea
+                    placeholder="Share a trade idea, setup or market observation..."
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    style={{ resize: 'vertical', fontSize: 14 }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                    <span style={{ color: '#333', fontSize: 12 }}>{content.length}/500</span>
+                    <button
+                        onClick={handlePost}
+                        disabled={posting || !content.trim()}
+                        style={{ padding: '8px 20px', background: posting || !content.trim() ? '#1a1a1a' : '#00ff88', color: posting || !content.trim() ? '#444' : '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                        {posting ? 'Posting...' : 'Post →'}
+                    </button>
+                </div>
+            </div>
 
-            {/* Main Content Layout */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24 }}>
-                
-                {/* Discussion Feed */}
-                <div>
-                    {/* Navigation/Filters */}
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                        {['All', 'Technical Analysis', 'Education', 'AI Trading', 'General'].map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                style={{
-                                    padding: '8px 14px',
-                                    border: 'none',
-                                    borderRadius: 6,
-                                    fontSize: 14,
-                                    cursor: 'pointer',
-                                    background: activeTab === tab ? '#22c55e' : '#f4f4f5',
-                                    color: activeTab === tab ? 'white' : '#71717a',
-                                    fontWeight: '500',
-                                    transition: 'all 0.2s'
-                                }}
-                            >
-                                {tab}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Create New Post Form */}
-                    <form onSubmit={handleCreatePost} style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 20 }}>
-                        <h4 style={{ margin: '0 0 10px 0', fontSize: 15 }}>Create a New Discussion</h4>
-                        <div style={{ display: 'flex', gap: 10 }}>
-                            <input 
-                                type="text" 
-                                placeholder="What trading topic do you want to discuss?" 
-                                value={newPostTitle}
-                                onChange={(e) => setNewPostTitle(e.target.value)}
-                                style={{ 
-                                    flex: 1, 
-                                    padding: '10px 14px', 
-                                    borderRadius: 8, 
-                                    border: '1px solid #cbd5e1',
-                                    fontSize: 14
-                                }}
-                            />
-                            <select
-                                value={newPostCategory}
-                                onChange={(e) => setNewPostCategory(e.target.value)}
-                                style={{
-                                    padding: '10px',
-                                    borderRadius: 8,
-                                    border: '1px solid #cbd5e1',
-                                    background: 'white',
-                                    fontSize: 14
-                                }}
-                            >
-                                <option value="General">General</option>
-                                <option value="Technical Analysis">Technical Analysis</option>
-                                <option value="Education">Education</option>
-                                <option value="AI Trading">AI Trading</option>
-                            </select>
-                            <button 
-                                type="submit"
-                                style={{ 
-                                    padding: '10px 20px', 
-                                    background: '#22c55e', 
-                                    color: 'white', 
-                                    border: 'none', 
-                                    borderRadius: 8, 
-                                    cursor: 'pointer',
-                                    fontWeight: 'bold'
-                                }}
-                            >
-                                Post
-                            </button>
-                        </div>
-                    </form>
-
-                    {/* Discussion List */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {threads
-                            .filter(t => activeTab === 'All' || t.category === activeTab)
-                            .map(thread => (
-                                <div 
-                                    key={thread.id} 
-                                    style={{ 
-                                        padding: 16, 
-                                        border: '1px solid #e2e8f0', 
-                                        borderRadius: 12, 
-                                        background: 'white',
-                                        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center'
-                                    }}
-                                >
+            {/* Feed */}
+            {loading ? (
+                <p style={{ textAlign: 'center', color: '#333', padding: 40 }}>Loading feed...</p>
+            ) : posts.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 60, background: '#111', border: '1px solid #1e1e1e', borderRadius: 12 }}>
+                    <p style={{ color: '#333', fontSize: 32, margin: '0 0 12px' }}>💬</p>
+                    <p style={{ color: '#444' }}>No posts yet. Be the first to share!</p>
+                </div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {posts.map(post => (
+                        <div key={post.id} style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: 20, transition: 'border-color 0.2s' }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = '#2a2a2a'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = '#1e1e1e'}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#00ff8820', border: '1px solid #00ff8840', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00ff88', fontWeight: 700, fontSize: 13 }}>
+                                        {post.profiles?.username?.[0]?.toUpperCase() || '?'}
+                                    </div>
                                     <div>
-                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                                            <span style={{ fontSize: 11, background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: 12, fontWeight: 'bold' }}>
-                                                {thread.category}
-                                            </span>
-                                            <span style={{ color: '#94a3b8', fontSize: 12 }}>• posted by {thread.author} • {thread.time}</span>
-                                        </div>
-                                        <h3 style={{ margin: '0 0 8px 0', fontSize: 16, color: '#0f172a', fontWeight: '600' }}>
-                                            {thread.title}
-                                        </h3>
-                                        <div style={{ display: 'flex', gap: 16, color: '#64748b', fontSize: 13 }}>
-                                            <span>💬 {thread.replies} replies</span>
-                                            <span 
-                                                onClick={() => handleLike(thread.id)} 
-                                                style={{ cursor: 'pointer', color: thread.hasLiked ? '#22c55e' : '#64748b', fontWeight: thread.hasLiked ? 'bold' : 'normal' }}
-                                            >
-                                                👍 {thread.likes} likes
-                                            </span>
-                                        </div>
+                                        <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>{post.profiles?.username || 'Anonymous'}</p>
+                                        <p style={{ margin: 0, color: '#333', fontSize: 11 }}>{timeAgo(post.created_at)}</p>
                                     </div>
                                 </div>
-                            ))
-                        }
-                    </div>
-                </div>
-
-                {/* Sidebar Info */}
-                <div>
-                    <div style={{ background: '#f8fafc', padding: 20, borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 16 }}>
-                        <h4 style={{ margin: '0 0 10px 0', fontSize: 15 }}>🟢 Active Traders</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            {['FXLegend', 'RiskFirst', 'QuantDev', 'PipsMaster'].map((trader, i) => (
-                                <div key={trader} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
-                                    <div style={{ width: 8, height: 8, background: '#22c55e', borderRadius: '50%' }}></div>
-                                    <span>{trader}</span>
-                                </div>
-                            ))}
+                                {post.user_id === user.id && (
+                                    <button onClick={() => handleDelete(post.id)} style={{ background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontSize: 14, padding: 4 }}
+                                        onMouseEnter={e => e.target.style.color = '#ff4466'}
+                                        onMouseLeave={e => e.target.style.color = '#333'}
+                                    >🗑</button>
+                                )}
+                            </div>
+                            <p style={{ margin: '0 0 14px', lineHeight: 1.6, fontSize: 14, color: '#ccc' }}>{post.content}</p>
+                            <button onClick={() => handleLike(post)} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', fontSize: 13, padding: 0 }}
+                                onMouseEnter={e => e.target.style.color = '#ff4466'}
+                                onMouseLeave={e => e.target.style.color = '#444'}
+                            >
+                                ❤️ {post.likes}
+                            </button>
                         </div>
-                    </div>
-
-                    <div style={{ background: '#f0fdf4', padding: 20, borderRadius: 12, border: '1px solid #bbf7d0', color: '#166534' }}>
-                        <h4 style={{ margin: '0 0 6px 0', fontSize: 15 }}>🎯 Weekly Challenge</h4>
-                        <p style={{ fontSize: 13, margin: 0, lineHeight: '1.4' }}>
-                            Achieve a 60%+ win rate with a minimum of 5 trades this week to earn the <strong>Risk Master</strong> profile badge!
-                        </p>
-                    </div>
+                    ))}
                 </div>
-
-            </div>
+            )}
         </div>
     )
 }

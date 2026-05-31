@@ -12,6 +12,7 @@ import Community from './pages/Community'
 import Leaderboard from './pages/Leaderboard'
 import Profile from './pages/Profile'
 import Pricing from './pages/Pricing'
+import Landing from './pages/Landing'
 
 const publicRoutes = ['/', '/login', '/signup', '/pricing']
 
@@ -23,7 +24,7 @@ function App() {
     <>
       {showNav && <Navbar />}
       <Routes>
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/pricing" element={<Pricing />} />

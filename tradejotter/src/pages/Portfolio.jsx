@@ -13,185 +13,135 @@ const Portfolio = () => {
         if (saved) setTrades(JSON.parse(saved))
     }, [user])
 
-    // Filter by time range
-    const filteredTrades = trades.filter(trade => {
+    const filtered = trades.filter(t => {
         if (timeRange === 'all') return true
-        const tradeDate = new Date(trade.createdAt)
+        const d = new Date(t.createdAt)
         const now = new Date()
-        if (timeRange === 'week') {
-            const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000)
-            return tradeDate >= weekAgo
-        }
-        if (timeRange === 'month') {
-            const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000)
-            return tradeDate >= monthAgo
-        }
+        if (timeRange === 'week') return d >= new Date(now - 7 * 86400000)
+        if (timeRange === 'month') return d >= new Date(now - 30 * 86400000)
         return true
     })
 
-    // Stats
-    const totalTrades = filteredTrades.length
-    const wins = filteredTrades.filter(t => t.result === 'win').length
-    const losses = filteredTrades.filter(t => t.result === 'loss').length
-    const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : 0
-    const totalPips = filteredTrades.reduce((sum, t) => sum + t.pips, 0).toFixed(1)
-    const avgRR = totalTrades > 0
-        ? (filteredTrades.reduce((sum, t) => sum + t.riskReward, 0) / totalTrades).toFixed(2)
-        : 0
+    const total = filtered.length
+    const wins = filtered.filter(t => t.result === 'win').length
+    const losses = filtered.filter(t => t.result === 'loss').length
+    const winRate = total > 0 ? ((wins / total) * 100).toFixed(1) : 0
+    const totalPips = filtered.reduce((sum, t) => sum + t.pips, 0).toFixed(1)
+    const avgRR = total > 0 ? (filtered.reduce((sum, t) => sum + t.riskReward, 0) / total).toFixed(2) : 0
 
-    // P&L by pair
-    const pairStats = {}
-    filteredTrades.forEach(trade => {
-        if (!pairStats[trade.pair]) {
-            pairStats[trade.pair] = { pair: trade.pair, trades: 0, wins: 0, pips: 0 }
-        }
-        pairStats[trade.pair].trades++
-        pairStats[trade.pair].pips += trade.pips
-        if (trade.result === 'win') pairStats[trade.pair].wins++
+    const pairMap = {}
+    filtered.forEach(t => {
+        if (!pairMap[t.pair]) pairMap[t.pair] = { pair: t.pair, trades: 0, wins: 0, pips: 0 }
+        pairMap[t.pair].trades++
+        pairMap[t.pair].pips += t.pips
+        if (t.result === 'win') pairMap[t.pair].wins++
     })
-    const pairList = Object.values(pairStats).sort((a, b) => b.trades - a.trades)
+    const pairs = Object.values(pairMap).sort((a, b) => b.trades - a.trades)
 
-    // Best and worst trades
-    const sortedByPips = [...filteredTrades].sort((a, b) => b.pips - a.pips)
-    const bestTrade = sortedByPips[0]
-    const worstTrade = sortedByPips[sortedByPips.length - 1]
+    const sorted = [...filtered].sort((a, b) => b.pips - a.pips)
+    const best = sorted[0]
+    const worst = sorted[sorted.length - 1]
 
-    // Equity curve (cumulative pips)
-    const equityCurve = []
-    let cumulative = 0
-        ;[...filteredTrades].reverse().forEach((trade, i) => {
-            cumulative += trade.pips
-            equityCurve.push({ index: i + 1, pips: cumulative })
-        })
+    // Equity curve
+    let cum = 0
+    const equity = [...filtered].reverse().map((t, i) => { cum += t.pips; return { i: i + 1, v: cum } })
+
+    const StatCard = ({ label, value, color }) => (
+        <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: '18px 20px' }}>
+            <p style={{ color: '#444', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>{label}</p>
+            <p style={{ fontSize: 24, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', margin: 0, color: color || '#fff' }}>{value}</p>
+        </div>
+    )
 
     return (
-        <div style={{ maxWidth: 900, margin: '40px auto', padding: 24 }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
                 <div>
-                    <h1>📊 Portfolio</h1>
-                    <p style={{ color: 'gray', margin: 0 }}>Your trading performance overview</p>
+                    <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>📊 Portfolio</h1>
+                    <p style={{ color: '#444', margin: '6px 0 0', fontSize: 13 }}>Your trading performance overview</p>
                 </div>
-                <div style={{ display: 'flex', gap: 12 }}>
-                    <select
-                        value={timeRange}
-                        onChange={e => setTimeRange(e.target.value)}
-                        style={{ padding: '8px 12px', borderRadius: 6 }}
-                    >
-                        <option value="all">All Time</option>
-                        <option value="month">Last 30 Days</option>
-                        <option value="week">Last 7 Days</option>
-                    </select>
-                    <button onClick={() => navigate('/dashboard')} style={{ padding: '8px 16px' }}>
-                        ← Dashboard
-                    </button>
-                </div>
+                <select value={timeRange} onChange={e => setTimeRange(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, width: 'auto' }}>
+                    <option value="all">All Time</option>
+                    <option value="month">Last 30 Days</option>
+                    <option value="week">Last 7 Days</option>
+                </select>
             </div>
 
-            {totalTrades === 0 ? (
-                <div style={{ textAlign: 'center', padding: 60, color: 'gray' }}>
-                    <p style={{ fontSize: 18 }}>No trades found for this period.</p>
-                    <button
-                        onClick={() => navigate('/journal')}
-                        style={{ padding: '10px 24px', background: '#22c55e', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-                    >
+            {total === 0 ? (
+                <div style={{ textAlign: 'center', padding: 80, background: '#111', border: '1px solid #1e1e1e', borderRadius: 12 }}>
+                    <p style={{ color: '#333', fontSize: 40, margin: '0 0 12px' }}>📭</p>
+                    <p style={{ color: '#444', margin: '0 0 20px' }}>No trades for this period</p>
+                    <button onClick={() => navigate('/journal')} style={{ padding: '10px 24px', background: '#00ff88', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
                         Log trades in Journal →
                     </button>
                 </div>
             ) : (
                 <>
-                    {/* Overview Stats */}
+                    {/* Stats grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-                        {[
-                            { label: 'Total Trades', value: totalTrades },
-                            { label: 'Win Rate', value: `${winRate}%` },
-                            { label: 'Total Pips', value: totalPips },
-                            { label: 'Wins', value: wins, color: '#22c55e' },
-                            { label: 'Losses', value: losses, color: '#ef4444' },
-                            { label: 'Avg R:R', value: avgRR },
-                        ].map(stat => (
-                            <div key={stat.label} style={{ padding: 16, border: '1px solid #ccc', borderRadius: 8, textAlign: 'center' }}>
-                                <p style={{ color: 'gray', margin: 0, fontSize: 13 }}>{stat.label}</p>
-                                <h3 style={{ margin: '6px 0', color: stat.color || 'inherit' }}>{stat.value}</h3>
+                        <StatCard label="Total Trades" value={total} />
+                        <StatCard label="Win Rate" value={`${winRate}%`} color={parseFloat(winRate) >= 50 ? '#00ff88' : '#ff4466'} />
+                        <StatCard label="Total Pips" value={totalPips} color={parseFloat(totalPips) >= 0 ? '#00ff88' : '#ff4466'} />
+                        <StatCard label="Wins" value={wins} color="#00ff88" />
+                        <StatCard label="Losses" value={losses} color="#ff4466" />
+                        <StatCard label="Avg R:R" value={avgRR} color="#ffbb00" />
+                    </div>
+
+                    {/* Equity curve */}
+                    <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                        <p style={{ color: '#444', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 16px' }}>Equity Curve</p>
+                        {equity.length > 1 ? (
+                            <svg width="100%" height="100" viewBox={`0 0 ${equity.length} 100`} preserveAspectRatio="none">
+                                {(() => {
+                                    const max = Math.max(...equity.map(p => p.v))
+                                    const min = Math.min(...equity.map(p => p.v))
+                                    const range = max - min || 1
+                                    const pts = equity.map(p => `${p.i - 1},${90 - ((p.v - min) / range) * 80}`).join(' ')
+                                    const last = equity[equity.length - 1]
+                                    const color = last.v >= 0 ? '#00ff88' : '#ff4466'
+                                    return <polyline points={pts} fill="none" stroke={color} strokeWidth="0.8" />
+                                })()}
+                            </svg>
+                        ) : (
+                            <p style={{ color: '#333', textAlign: 'center', padding: 20 }}>Log more trades to see your equity curve</p>
+                        )}
+                    </div>
+
+                    {/* Pair performance */}
+                    <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
+                        <div style={{ padding: '14px 20px', borderBottom: '1px solid #1a1a1a' }}>
+                            <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>Performance by Pair</p>
+                        </div>
+                        {pairs.map(p => (
+                            <div key={p.pair} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #161616' }}>
+                                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                    <span style={{ fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', fontSize: 14 }}>{p.pair}</span>
+                                    <span style={{ color: '#333', fontSize: 12 }}>{p.trades} trades</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: 20 }}>
+                                    <span style={{ color: '#00ff88', fontSize: 13, fontFamily: 'JetBrains Mono, monospace' }}>{((p.wins / p.trades) * 100).toFixed(0)}% WR</span>
+                                    <span style={{ color: p.pips >= 0 ? '#00ff88' : '#ff4466', fontSize: 13, fontFamily: 'JetBrains Mono, monospace' }}>{p.pips >= 0 ? '+' : ''}{p.pips.toFixed(1)}p</span>
+                                </div>
                             </div>
                         ))}
                     </div>
 
-                    {/* Equity Curve */}
-                    <div style={{ border: '1px solid #ccc', borderRadius: 8, padding: 20, marginBottom: 24 }}>
-                        <h3 style={{ marginTop: 0 }}>Equity Curve (Pips)</h3>
-                        {equityCurve.length > 1 ? (
-                            <div style={{ position: 'relative', height: 120 }}>
-                                <svg width="100%" height="120" viewBox={`0 0 ${equityCurve.length} 120`} preserveAspectRatio="none">
-                                    {(() => {
-                                        const maxPips = Math.max(...equityCurve.map(p => p.pips))
-                                        const minPips = Math.min(...equityCurve.map(p => p.pips))
-                                        const range = maxPips - minPips || 1
-                                        const points = equityCurve.map((p, i) => {
-                                            const x = i
-                                            const y = 110 - ((p.pips - minPips) / range) * 100
-                                            return `${x},${y}`
-                                        }).join(' ')
-                                        const lastPoint = equityCurve[equityCurve.length - 1]
-                                        const lastY = 110 - ((lastPoint.pips - minPips) / range) * 100
-                                        const color = lastPoint.pips >= 0 ? '#22c55e' : '#ef4444'
-                                        return (
-                                            <>
-                                                <polyline
-                                                    points={points}
-                                                    fill="none"
-                                                    stroke={color}
-                                                    strokeWidth="0.5"
-                                                />
-                                            </>
-                                        )
-                                    })()}
-                                </svg>
-                            </div>
-                        ) : (
-                            <p style={{ color: 'gray' }}>Log more trades to see your equity curve.</p>
-                        )}
-                    </div>
-
-                    {/* P&L by Pair */}
-                    <div style={{ border: '1px solid #ccc', borderRadius: 8, padding: 20, marginBottom: 24 }}>
-                        <h3 style={{ marginTop: 0 }}>Performance by Pair</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {pairList.map(p => (
-                                <div key={p.pair} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#33333311', borderRadius: 8 }}>
-                                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                                        <strong>{p.pair}</strong>
-                                        <span style={{ color: 'gray', fontSize: 13 }}>{p.trades} trades</span>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                                        <span style={{ fontSize: 13, color: '#22c55e' }}>
-                                            {((p.wins / p.trades) * 100).toFixed(0)}% WR
-                                        </span>
-                                        <span style={{ fontSize: 13, color: p.pips >= 0 ? '#22c55e' : '#ef4444' }}>
-                                            {p.pips >= 0 ? '+' : ''}{p.pips.toFixed(1)} pips
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Best & Worst Trade */}
+                    {/* Best & worst */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                        {bestTrade && (
-                            <div style={{ border: '1px solid #22c55e', borderRadius: 8, padding: 20 }}>
-                                <h3 style={{ marginTop: 0, color: '#22c55e' }}>🏆 Best Trade</h3>
-                                <p style={{ margin: 0 }}><strong>{bestTrade.pair}</strong> · {bestTrade.direction.toUpperCase()}</p>
-                                <p style={{ margin: '4px 0', color: '#22c55e', fontSize: 20 }}>+{bestTrade.pips} pips</p>
-                                <p style={{ margin: 0, color: 'gray', fontSize: 13 }}>R:R {bestTrade.riskReward} · {new Date(bestTrade.createdAt).toLocaleDateString()}</p>
+                        {best && (
+                            <div style={{ background: '#111', border: '1px solid #00ff8830', borderRadius: 12, padding: 20 }}>
+                                <p style={{ color: '#00ff88', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>🏆 Best Trade</p>
+                                <p style={{ fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', margin: '0 0 4px', fontSize: 15 }}>{best.pair}</p>
+                                <p style={{ color: '#00ff88', fontSize: 28, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', margin: '0 0 6px' }}>+{best.pips}p</p>
+                                <p style={{ color: '#333', fontSize: 12, margin: 0 }}>R:R {best.riskReward} · {new Date(best.createdAt).toLocaleDateString()}</p>
                             </div>
                         )}
-                        {worstTrade && worstTrade.id !== bestTrade?.id && (
-                            <div style={{ border: '1px solid #ef4444', borderRadius: 8, padding: 20 }}>
-                                <h3 style={{ marginTop: 0, color: '#ef4444' }}>📉 Worst Trade</h3>
-                                <p style={{ margin: 0 }}><strong>{worstTrade.pair}</strong> · {worstTrade.direction.toUpperCase()}</p>
-                                <p style={{ margin: '4px 0', color: '#ef4444', fontSize: 20 }}>{worstTrade.pips} pips</p>
-                                <p style={{ margin: 0, color: 'gray', fontSize: 13 }}>R:R {worstTrade.riskReward} · {new Date(worstTrade.createdAt).toLocaleDateString()}</p>
+                        {worst && worst.id !== best?.id && (
+                            <div style={{ background: '#111', border: '1px solid #ff446630', borderRadius: 12, padding: 20 }}>
+                                <p style={{ color: '#ff4466', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>📉 Worst Trade</p>
+                                <p style={{ fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', margin: '0 0 4px', fontSize: 15 }}>{worst.pair}</p>
+                                <p style={{ color: '#ff4466', fontSize: 28, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', margin: '0 0 6px' }}>{worst.pips}p</p>
+                                <p style={{ color: '#333', fontSize: 12, margin: 0 }}>R:R {worst.riskReward} · {new Date(worst.createdAt).toLocaleDateString()}</p>
                             </div>
                         )}
                     </div>

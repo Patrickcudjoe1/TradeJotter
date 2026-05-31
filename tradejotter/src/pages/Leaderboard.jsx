@@ -1,192 +1,108 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthProvider'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const Leaderboard = () => {
     const { user } = useAuth()
-    const navigate = useNavigate()
     const [traders, setTraders] = useState([])
     const [loading, setLoading] = useState(true)
     const [period, setPeriod] = useState('alltime')
 
-    useEffect(() => {
-        fetchLeaderboard()
-    }, [period])
+    useEffect(() => { fetchLeaderboard() }, [period])
 
     const fetchLeaderboard = async () => {
         setLoading(true)
+        const { data: profiles } = await supabase.from('profiles').select('id, username')
+        if (!profiles) { setLoading(false); return }
 
-        // Build leaderboard from profiles + trades
-        const { data: profiles, error } = await supabase
-            .from('profiles')
-            .select('id, username')
-
-        if (error || !profiles) {
-            setLoading(false)
-            return
-        }
-
-        // Get all trades and compute stats per user
-        const leaderboardData = []
-
-        for (const profile of profiles) {
-            let query = supabase
-                .from('trades')
-                .select('*')
-                .eq('user_id', profile.id)
-
-            if (period === 'weekly') {
-                const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-                query = query.gte('created_at', weekAgo)
-            } else if (period === 'monthly') {
-                const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-                query = query.gte('created_at', monthAgo)
-            }
-
-            const { data: trades } = await query
-
+        const data = []
+        for (const p of profiles) {
+            let q = supabase.from('trades').select('*').eq('user_id', p.id)
+            if (period === 'weekly') q = q.gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+            if (period === 'monthly') q = q.gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString())
+            const { data: trades } = await q
             if (trades && trades.length > 0) {
                 const wins = trades.filter(t => t.result === 'win').length
-                const winRate = ((wins / trades.length) * 100).toFixed(1)
-                const totalPips = trades.reduce((sum, t) => sum + (t.pips || 0), 0).toFixed(1)
-                const avgRR = (trades.reduce((sum, t) => sum + (t.risk_reward || 0), 0) / trades.length).toFixed(2)
-
-                leaderboardData.push({
-                    id: profile.id,
-                    username: profile.username || 'Anonymous',
+                data.push({
+                    id: p.id,
+                    username: p.username || 'Anonymous',
                     totalTrades: trades.length,
-                    winRate: parseFloat(winRate),
-                    totalPips: parseFloat(totalPips),
-                    avgRR: parseFloat(avgRR),
-                    isCurrentUser: profile.id === user.id
+                    winRate: parseFloat(((wins / trades.length) * 100).toFixed(1)),
+                    totalPips: parseFloat(trades.reduce((s, t) => s + (t.pips || 0), 0).toFixed(1)),
+                    avgRR: parseFloat((trades.reduce((s, t) => s + (t.risk_reward || 0), 0) / trades.length).toFixed(2)),
+                    isMe: p.id === user.id
                 })
             }
         }
-
-        // Sort by win rate
-        leaderboardData.sort((a, b) => b.winRate - a.winRate)
-        setTraders(leaderboardData)
+        data.sort((a, b) => b.winRate - a.winRate)
+        setTraders(data)
         setLoading(false)
     }
 
-    const getMedal = (index) => {
-        if (index === 0) return '🥇'
-        if (index === 1) return '🥈'
-        if (index === 2) return '🥉'
-        return `#${index + 1}`
-    }
+    const medals = ['🥇', '🥈', '🥉']
 
     return (
-        <div style={{ maxWidth: 800, margin: '40px auto', padding: 24 }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
                 <div>
-                    <h1>🏆 Leaderboard</h1>
-                    <p style={{ color: 'gray', margin: 0 }}>Top traders ranked by win rate</p>
+                    <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>🏆 Leaderboard</h1>
+                    <p style={{ color: '#444', margin: '6px 0 0', fontSize: 13 }}>Top traders ranked by win rate</p>
                 </div>
-                <div style={{ display: 'flex', gap: 12 }}>
-                    <select
-                        value={period}
-                        onChange={e => setPeriod(e.target.value)}
-                        style={{ padding: '8px 12px', borderRadius: 6 }}
-                    >
-                        <option value="alltime">All Time</option>
-                        <option value="monthly">This Month</option>
-                        <option value="weekly">This Week</option>
-                    </select>
-                    <button onClick={() => navigate('/dashboard')} style={{ padding: '8px 16px' }}>
-                        ← Dashboard
-                    </button>
-                </div>
+                <select value={period} onChange={e => setPeriod(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, width: 'auto' }}>
+                    <option value="alltime">All Time</option>
+                    <option value="monthly">This Month</option>
+                    <option value="weekly">This Week</option>
+                </select>
             </div>
 
-            {/* Top 3 Podium */}
+            {/* Podium */}
             {traders.length >= 3 && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 32 }}>
-                    {/* 2nd place */}
-                    <div style={{ border: '1px solid #9ca3af', borderRadius: 8, padding: 20, textAlign: 'center', marginTop: 24 }}>
-                        <p style={{ fontSize: 32, margin: 0 }}>🥈</p>
-                        <p style={{ fontWeight: 'bold', margin: '8px 0 4px' }}>{traders[1]?.username}</p>
-                        <p style={{ color: '#22c55e', margin: 0, fontSize: 18 }}>{traders[1]?.winRate}%</p>
-                        <p style={{ color: 'gray', margin: '4px 0 0', fontSize: 12 }}>{traders[1]?.totalTrades} trades</p>
-                    </div>
-                    {/* 1st place */}
-                    <div style={{ border: '2px solid #f59e0b', borderRadius: 8, padding: 20, textAlign: 'center', background: '#f59e0b11' }}>
-                        <p style={{ fontSize: 40, margin: 0 }}>🥇</p>
-                        <p style={{ fontWeight: 'bold', margin: '8px 0 4px', fontSize: 16 }}>{traders[0]?.username}</p>
-                        <p style={{ color: '#22c55e', margin: 0, fontSize: 22, fontWeight: 'bold' }}>{traders[0]?.winRate}%</p>
-                        <p style={{ color: 'gray', margin: '4px 0 0', fontSize: 12 }}>{traders[0]?.totalTrades} trades</p>
-                    </div>
-                    {/* 3rd place */}
-                    <div style={{ border: '1px solid #cd7f32', borderRadius: 8, padding: 20, textAlign: 'center', marginTop: 40 }}>
-                        <p style={{ fontSize: 28, margin: 0 }}>🥉</p>
-                        <p style={{ fontWeight: 'bold', margin: '8px 0 4px' }}>{traders[2]?.username}</p>
-                        <p style={{ color: '#22c55e', margin: 0, fontSize: 18 }}>{traders[2]?.winRate}%</p>
-                        <p style={{ color: 'gray', margin: '4px 0 0', fontSize: 12 }}>{traders[2]?.totalTrades} trades</p>
-                    </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 32 }}>
+                    {[traders[1], traders[0], traders[2]].map((t, i) => {
+                        const realIndex = i === 0 ? 1 : i === 1 ? 0 : 2
+                        const heights = ['80px', '0px', '100px']
+                        return (
+                            <div key={t.id} style={{ background: '#111', border: `1px solid ${realIndex === 0 ? '#ffbb0040' : '#1e1e1e'}`, borderRadius: 12, padding: 20, textAlign: 'center', marginTop: heights[i] }}>
+                                <p style={{ fontSize: realIndex === 0 ? 36 : 28, margin: '0 0 8px' }}>{medals[realIndex]}</p>
+                                <p style={{ fontWeight: 700, margin: '0 0 4px', fontSize: 14 }}>{t.username}</p>
+                                <p style={{ color: '#00ff88', fontFamily: 'JetBrains Mono, monospace', fontSize: realIndex === 0 ? 22 : 18, fontWeight: 700, margin: '0 0 4px' }}>{t.winRate}%</p>
+                                <p style={{ color: '#333', fontSize: 11, margin: 0 }}>{t.totalTrades} trades</p>
+                            </div>
+                        )
+                    })}
                 </div>
             )}
 
-            {/* Full Rankings Table */}
+            {/* Table */}
             {loading ? (
-                <p style={{ textAlign: 'center', color: 'gray' }}>Loading leaderboard...</p>
+                <p style={{ textAlign: 'center', color: '#333', padding: 40 }}>Loading...</p>
             ) : traders.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 48, color: 'gray' }}>
-                    <p style={{ fontSize: 18 }}>No traders ranked yet.</p>
-                    <button
-                        onClick={() => navigate('/journal')}
-                        style={{ padding: '10px 24px', background: '#22c55e', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-                    >
-                        Log trades to appear here →
-                    </button>
+                <div style={{ textAlign: 'center', padding: 60, background: '#111', border: '1px solid #1e1e1e', borderRadius: 12 }}>
+                    <p style={{ color: '#333', fontSize: 40, margin: '0 0 12px' }}>🏆</p>
+                    <p style={{ color: '#444' }}>No traders ranked yet. Log trades to appear here!</p>
                 </div>
             ) : (
-                <div style={{ border: '1px solid #ccc', borderRadius: 8, overflow: 'hidden' }}>
-                    {/* Table header */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr repeat(4, 100px)', padding: '12px 16px', background: '#33333322', fontWeight: 'bold', fontSize: 13, color: 'gray' }}>
-                        <span>Rank</span>
-                        <span>Trader</span>
-                        <span style={{ textAlign: 'center' }}>Win Rate</span>
-                        <span style={{ textAlign: 'center' }}>Trades</span>
-                        <span style={{ textAlign: 'center' }}>Pips</span>
-                        <span style={{ textAlign: 'center' }}>Avg R:R</span>
+                <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, overflow: 'hidden' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr repeat(4, 90px)', padding: '10px 20px', borderBottom: '1px solid #1a1a1a' }}>
+                        {['#', 'Trader', 'Win Rate', 'Trades', 'Pips', 'R:R'].map(h => (
+                            <span key={h} style={{ color: '#333', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: h === 'Trader' || h === '#' ? 'left' : 'center' }}>{h}</span>
+                        ))}
                     </div>
-
-                    {/* Table rows */}
-                    {traders.map((trader, index) => (
-                        <div
-                            key={trader.id}
-                            style={{
-                                display: 'grid',
-                                gridTemplateColumns: '50px 1fr repeat(4, 100px)',
-                                padding: '14px 16px',
-                                borderTop: '1px solid #ccc',
-                                background: trader.isCurrentUser ? '#22c55e11' : 'transparent',
-                                alignItems: 'center'
-                            }}
-                        >
-                            <span style={{ fontWeight: 'bold', fontSize: 16 }}>{getMedal(index)}</span>
+                    {traders.map((t, i) => (
+                        <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '48px 1fr repeat(4, 90px)', padding: '14px 20px', borderBottom: '1px solid #161616', background: t.isMe ? '#00ff8808' : 'transparent', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 700, fontSize: 16 }}>{medals[i] || `#${i + 1}`}</span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div style={{
-                                    width: 32, height: 32, borderRadius: '50%',
-                                    background: trader.isCurrentUser ? '#22c55e' : '#6b7280',
-                                    display: 'flex', alignItems: 'center',
-                                    justifyContent: 'center', color: 'white',
-                                    fontWeight: 'bold', fontSize: 13
-                                }}>
-                                    {trader.username[0].toUpperCase()}
+                                <div style={{ width: 30, height: 30, borderRadius: '50%', background: t.isMe ? '#00ff8820' : '#1a1a1a', border: `1px solid ${t.isMe ? '#00ff8840' : '#2a2a2a'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.isMe ? '#00ff88' : '#555', fontWeight: 700, fontSize: 12 }}>
+                                    {t.username[0].toUpperCase()}
                                 </div>
-                                <span style={{ fontWeight: trader.isCurrentUser ? 'bold' : 'normal' }}>
-                                    {trader.username} {trader.isCurrentUser && '(you)'}
+                                <span style={{ fontWeight: t.isMe ? 700 : 400, color: t.isMe ? '#00ff88' : '#fff', fontSize: 14 }}>
+                                    {t.username}{t.isMe && ' (you)'}
                                 </span>
                             </div>
-                            <span style={{ textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>{trader.winRate}%</span>
-                            <span style={{ textAlign: 'center', color: 'gray' }}>{trader.totalTrades}</span>
-                            <span style={{ textAlign: 'center', color: trader.totalPips >= 0 ? '#22c55e' : '#ef4444' }}>
-                                {trader.totalPips >= 0 ? '+' : ''}{trader.totalPips}
-                            </span>
-                            <span style={{ textAlign: 'center', color: 'gray' }}>{trader.avgRR}</span>
+                            <span style={{ textAlign: 'center', color: '#00ff88', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>{t.winRate}%</span>
+                            <span style={{ textAlign: 'center', color: '#444', fontFamily: 'JetBrains Mono, monospace' }}>{t.totalTrades}</span>
+                            <span style={{ textAlign: 'center', color: t.totalPips >= 0 ? '#00ff88' : '#ff4466', fontFamily: 'JetBrains Mono, monospace' }}>{t.totalPips >= 0 ? '+' : ''}{t.totalPips}</span>
+                            <span style={{ textAlign: 'center', color: '#ffbb00', fontFamily: 'JetBrains Mono, monospace' }}>{t.avgRR}</span>
                         </div>
                     ))}
                 </div>
