@@ -2,6 +2,7 @@ import { useAuth } from '../context/AuthProvider'
 import { supabase } from '../lib/supabase'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import useMediaQuery from '../hooks/useMediaQuery'
 
 const StatCard = ({ label, value, sub, color }) => (
     <div style={{
@@ -27,6 +28,7 @@ const StatCard = ({ label, value, sub, color }) => (
 const Dashboard = () => {
     const { user } = useAuth()
     const navigate = useNavigate()
+    const { isMobile } = useMediaQuery()
     const [plan, setPlan] = useState('free')
     const [username, setUsername] = useState('')
     const [stats, setStats] = useState({ totalTrades: 0, winRate: 0, totalPips: 0, streak: 0 })
@@ -75,12 +77,12 @@ const Dashboard = () => {
     ]
 
     return (
-        <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: isMobile ? '24px 16px' : '40px 24px' }}>
 
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 40 }}>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? 16 : 0, marginBottom: 40 }}>
                 <div>
-                    <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>
+                    <h1 style={{ fontSize: isMobile ? 24 : 28, fontWeight: 700, margin: 0 }}>
                         Welcome back, <span style={{ color: '#00ff88' }}>{username || user.email}</span> 👋
                     </h1>
                     <p style={{ color: '#444', margin: '8px 0 0', fontSize: 13 }}>
@@ -102,7 +104,7 @@ const Dashboard = () => {
             </div>
 
             {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
                 <StatCard label="Total Trades" value={stats.totalTrades} sub="all time" />
                 <StatCard
                     label="Win Rate"
@@ -120,7 +122,7 @@ const Dashboard = () => {
             </div>
 
             {/* Recent Trades + Quick Links */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 24, marginBottom: 32 }}>
 
                 {/* Recent Trades */}
                 <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, overflow: 'hidden' }}>
@@ -206,8 +208,10 @@ const Dashboard = () => {
                     borderRadius: 12,
                     padding: '20px 24px',
                     display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: isMobile ? 16 : 0,
                     justifyContent: 'space-between',
-                    alignItems: 'center'
+                    alignItems: isMobile ? 'stretch' : 'center'
                 }}>
                     <div>
                         <p style={{ margin: 0, fontWeight: 600, fontSize: 15 }}>Unlock the full TradeJotter experience</p>
@@ -215,7 +219,7 @@ const Dashboard = () => {
                     </div>
                     <button
                         onClick={() => navigate('/pricing')}
-                        style={{ padding: '10px 20px', background: '#00ff88', color: '#000', fontWeight: 700, border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        style={{ padding: '10px 20px', background: '#00ff88', color: '#000', fontWeight: 700, border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center' }}
                     >
                         Upgrade → $9.99/mo
                     </button>
